@@ -7,21 +7,22 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch(e) { body = {}; }
-    }
+    // Baca body secara manual dari stream
+    const rawBody = await new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', chunk => { data += chunk; });
+      req.on('end', () => resolve(data));
+      req.on('error', reject);
+    });
 
-    const prompt = body && body.prompt;
+    let body = {};
+    try { body = JSON.parse(rawBody); } catch(e) {}
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt kosong', body: JSON.stringify(body) });
-    }
+    const prompt = body.prompt;
+    if (!prompt) return res.status(400).json({ error: 'Prompt kosong', raw: rawBody });
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'ANTHROPIC_API_KEY belum diset di Vercel' });
-    }
+    if (!apiKey) return res.status(500).json({ error: 'API key belum diset' });
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -38,10 +39,7 @@ module.exports = async function handler(req, res) {
     });
 
     const data = await response.json();
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data.error && data.error.message });
-    }
+    if (!response.ok) return res.status(response.status).json({ error: data.error && data.error.message });
 
     return res.status(200).json(data);
 
