@@ -1,8 +1,4 @@
-export const config = {
-  api: { bodyParser: true },
-};
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -12,13 +8,20 @@ export default async function handler(req, res) {
 
   try {
     let body = req.body;
-    if (typeof body === 'string') body = JSON.parse(body);
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch(e) { body = {}; }
+    }
 
-    const prompt = body?.prompt;
-    if (!prompt) return res.status(400).json({ error: 'Prompt kosong' });
+    const prompt = body && body.prompt;
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt kosong', body: JSON.stringify(body) });
+    }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: 'API key belum dikonfigurasi' });
+    if (!apiKey) {
+      return res.status(500).json({ error: 'ANTHROPIC_API_KEY belum diset di Vercel' });
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -35,10 +38,14 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
-    if (!response.ok) return res.status(response.status).json({ error: data.error?.message });
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error && data.error.message });
+    }
 
     return res.status(200).json(data);
+
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
-}
+};
